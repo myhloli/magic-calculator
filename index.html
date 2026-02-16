@@ -711,21 +711,28 @@
   });
 
   // 🎩 全屏拦截层：魔术模式下点击任意位置都视为按下数字键
-  document.getElementById('magicOverlay').addEventListener('click', function (e) {
+  let lastMagicClickTime = 0;
+  const MAGIC_CLICK_DEBOUNCE = 300; // 防抖时间（毫秒）
+
+  function handleMagicClick(e) {
     e.stopPropagation();
     e.preventDefault();
-    if (magicMode) {
-      inputDigit('0'); // 参数无所谓，魔术模式下会被拦截成 MagicNumber 的下一位
+    
+    if (!magicMode) return;
+    
+    // 防抖：短时间内的重复点击只处理一次
+    const now = Date.now();
+    if (now - lastMagicClickTime < MAGIC_CLICK_DEBOUNCE) {
+      return;
     }
-  });
-  // 同时拦截 touchend 防止移动端延迟
-  document.getElementById('magicOverlay').addEventListener('touchend', function (e) {
-    e.stopPropagation();
-    e.preventDefault();
-    if (magicMode) {
-      inputDigit('0');
-    }
-  });
+    lastMagicClickTime = now;
+    
+    inputDigit('0'); // 参数无所谓，魔术模式下会被拦截成 MagicNumber 的下一位
+  }
+
+  // 优先使用 touchend（移动端），同时支持 click（桌面端）
+  document.getElementById('magicOverlay').addEventListener('touchend', handleMagicClick, { passive: false });
+  document.getElementById('magicOverlay').addEventListener('click', handleMagicClick);
 
   // ============================================================
   //  Event Delegation — Button Clicks
