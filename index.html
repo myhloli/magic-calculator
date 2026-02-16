@@ -159,7 +159,7 @@
   }
 
   html.standalone-mode .buttons {
-    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
 
   .btn {
@@ -221,7 +221,8 @@
     .display-text { font-size: 48px; }
     .btn { font-size: 22px; }
     .btn-operator { font-size: 28px; }
-    .buttons { gap: 8px; padding: 0 8px 8px 8px; }
+    .buttons { gap: 8px; padding: 0 8px calc(8px + env(safe-area-inset-bottom)) 8px; }
+    html.standalone-mode .buttons { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   }
 </style>
 </head>
