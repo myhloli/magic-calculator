@@ -31,17 +31,6 @@
     overscroll-behavior: none;
   }
 
-  /* 浏览器模式下滚动锁定后的状态 */
-  html.scroll-locked, body.scroll-locked {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    touch-action: none;
-  }
-
   /* PWA 独立模式：完全禁止滚动 */
   @media (display-mode: standalone) {
     html, body {
@@ -795,71 +784,13 @@
   });
 
   // ============================================================
-  //  浏览器模式下尝试收起地址栏/工具栏（iOS/Android）
-  //  注意：浏览器模式无法强制永久隐藏，PWA 独立模式才可完全无地址栏
+  //  PWA 模式检测
   // ============================================================
-  let scrollLocked = false;
-  let hasScrolledDown = false;
-
   function isStandaloneMode() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   }
 
-  function lockScroll() {
-    if (scrollLocked) return;
-    scrollLocked = true;
-    // 添加 class 来固定 body 位置
-    document.documentElement.classList.add('scroll-locked');
-    document.body.classList.add('scroll-locked');
-  }
-
-  // 监听用户滚动行为，一旦滚动就锁定
-  function handleBrowserScroll() {
-    if (isStandaloneMode()) return;
-    if (scrollLocked) return;
-    
-    // 当用户下滑一点后（隐藏地址栏），立即锁定
-    if (window.scrollY > 0) {
-      hasScrolledDown = true;
-      // 延迟一点锁定，让滚动动画完成
-      setTimeout(function() {
-        lockScroll();
-      }, 300);
-    }
-  }
-
-  // 防止锁定后再回滚
-  function preventScrollBack(e) {
-    if (!scrollLocked) return;
-    // 如果尝试回到顶部，阻止
-    if (window.scrollY < 1 && hasScrolledDown) {
-      e.preventDefault();
-      e.stopPropagation();
-      window.scrollTo(0, 1);
-    }
-  }
-
-  // 初始提示用户可以下滑（可选）
-  function tryHideBrowserBars() {
-    if (isStandaloneMode()) return;
-    // 不再自动滚动，让用户手动下滑
-    // 移除主动滚动行为，保留监听器即可
-  }
-
-  // PWA 模式下完全阻止触摸滚动
-  function preventTouchScroll(e) {
-    if (isStandaloneMode()) {
-      // 计算器区域内的触摸允许（按钮点击）
-      const calc = document.querySelector('.calculator');
-      if (calc && calc.contains(e.target)) {
-        return; // 允许按钮点击
-      }
-      // 阻止其他触摸滚动
-      e.preventDefault();
-    }
-  }
-
-  // 为 PWA 模式添加额外的滚动阻止
+  // 为 PWA 独立模式添加额外的滚动阻止
   if (isStandaloneMode()) {
     document.addEventListener('touchmove', function(e) {
       // 只阻止可能导致滚动的触摸移动
@@ -869,8 +800,6 @@
     }, { passive: false });
   }
 
-  const A2HS_TIP_KEY = 'a2hs-tip-dismissed-v1';
-
   function isIOS() {
     return /iPhone|iPad|iPod/i.test(window.navigator.userAgent);
   }
@@ -879,25 +808,15 @@
     return isIOS() && !isStandaloneMode();
   }
 
-  function hasDismissedA2HSTip() {
-    try {
-      return window.localStorage.getItem(A2HS_TIP_KEY) === '1';
-    } catch (err) {
-      return false;
-    }
-  }
-
   function dismissA2HSTip() {
     const tipEl = document.getElementById('a2hsTip');
     if (tipEl) tipEl.classList.remove('show');
-    try {
-      window.localStorage.setItem(A2HS_TIP_KEY, '1');
-    } catch (err) {}
+    // 不再保存到 localStorage，每次都会弹出
   }
 
   function maybeShowA2HSTip() {
     if (!isIOSBrowserMode()) return;
-    if (hasDismissedA2HSTip()) return;
+    // 移除了 hasDismissedA2HSTip 检查，每次都弹出
     const tipEl = document.getElementById('a2hsTip');
     if (!tipEl) return;
     setTimeout(function () {
@@ -905,17 +824,8 @@
     }, 900);
   }
 
-  window.addEventListener('load', tryHideBrowserBars);
-  window.addEventListener('pageshow', tryHideBrowserBars);
-  window.addEventListener('orientationchange', tryHideBrowserBars);
   window.addEventListener('load', maybeShowA2HSTip);
-
-  // 浏览器模式下监听滚动，一旦下滑就锁定
-  if (!isStandaloneMode()) {
-    window.addEventListener('scroll', handleBrowserScroll, { passive: true });
-    window.addEventListener('scroll', preventScrollBack, { passive: false });
-    window.addEventListener('touchmove', preventScrollBack, { passive: false });
-  }
+  window.addEventListener('pageshow', maybeShowA2HSTip);
 
   const a2hsCloseBtn = document.getElementById('a2hsTipClose');
   if (a2hsCloseBtn) {
