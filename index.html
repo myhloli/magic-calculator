@@ -6,6 +6,7 @@
 <!-- iOS 全屏模式 -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calculator">
 <!-- Android 全屏模式 -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
@@ -18,7 +19,9 @@
 
   html, body {
     height: 100%; width: 100%;
-    overflow: hidden;
+    min-height: 101vh;
+    overflow-x: hidden;
+    overflow-y: auto;
     background: #000;
     font-family: -apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
     touch-action: manipulation;
@@ -26,8 +29,6 @@
     -webkit-user-select: none;
     /* 防止 iOS 橡皮筋效果 */
     overscroll-behavior: none;
-    position: fixed;
-    top: 0; left: 0;
   }
 
   /* ========== 魔术模式全屏拦截层 ========== */
@@ -96,6 +97,40 @@
   .display-text.shrink-1 { font-size: 68px; }
   .display-text.shrink-2 { font-size: 52px; }
   .display-text.shrink-3 { font-size: 40px; }
+
+  /* ========== iOS 主屏幕提示条 ========== */
+  .a2hs-tip {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 10000;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(20, 20, 20, 0.92);
+    color: #fff;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .a2hs-tip.show {
+    display: flex;
+  }
+  .a2hs-tip-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #000;
+    background: #fff;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
 
   /* ========== Button Grid ========== */
   .buttons {
@@ -168,6 +203,12 @@
 
 <!-- 🎩 魔术模式全屏拦截层：点击任意位置都视为按下数字键 -->
 <div class="magic-overlay" id="magicOverlay"></div>
+
+<!-- iOS 浏览器模式提示：引导添加到主屏幕 -->
+<div class="a2hs-tip" id="a2hsTip" role="status" aria-live="polite">
+  <span>在 iPhone 点“分享”→“添加到主屏幕”，可隐藏地址栏与底栏。</span>
+  <button class="a2hs-tip-btn" id="a2hsTipClose" type="button">知道了</button>
+</div>
 
 <div class="calculator">
   <!-- 显示区域 -->
@@ -723,11 +764,65 @@
   });
 
   // ============================================================
-  //  全屏模式：尝试隐藏地址栏 (Android)
+  //  浏览器模式下尝试收起地址栏/工具栏（iOS/Android）
+  //  注意：浏览器模式无法强制永久隐藏，PWA 独立模式才可完全无地址栏
   // ============================================================
-  window.addEventListener('load', function () {
-    setTimeout(function () { window.scrollTo(0, 1); }, 100);
-  });
+  function isStandaloneMode() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
+  function tryHideBrowserBars() {
+    if (isStandaloneMode()) return;
+    requestAnimationFrame(function () {
+      setTimeout(function () { window.scrollTo(0, 1); }, 60);
+    });
+  }
+
+  const A2HS_TIP_KEY = 'a2hs-tip-dismissed-v1';
+
+  function isIOS() {
+    return /iPhone|iPad|iPod/i.test(window.navigator.userAgent);
+  }
+
+  function isIOSBrowserMode() {
+    return isIOS() && !isStandaloneMode();
+  }
+
+  function hasDismissedA2HSTip() {
+    try {
+      return window.localStorage.getItem(A2HS_TIP_KEY) === '1';
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function dismissA2HSTip() {
+    const tipEl = document.getElementById('a2hsTip');
+    if (tipEl) tipEl.classList.remove('show');
+    try {
+      window.localStorage.setItem(A2HS_TIP_KEY, '1');
+    } catch (err) {}
+  }
+
+  function maybeShowA2HSTip() {
+    if (!isIOSBrowserMode()) return;
+    if (hasDismissedA2HSTip()) return;
+    const tipEl = document.getElementById('a2hsTip');
+    if (!tipEl) return;
+    setTimeout(function () {
+      tipEl.classList.add('show');
+    }, 900);
+  }
+
+  window.addEventListener('load', tryHideBrowserBars);
+  window.addEventListener('pageshow', tryHideBrowserBars);
+  window.addEventListener('orientationchange', tryHideBrowserBars);
+  window.addEventListener('load', maybeShowA2HSTip);
+
+  const a2hsCloseBtn = document.getElementById('a2hsTipClose');
+  if (a2hsCloseBtn) {
+    a2hsCloseBtn.addEventListener('click', dismissA2HSTip);
+  }
 
   // 阻止双击缩放和长按菜单
   document.addEventListener('dblclick', function (e) { e.preventDefault(); });
