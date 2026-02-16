@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<!-- iOS 全屏模式 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- Android 全屏模式 -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<!-- PWA manifest for Android fullscreen -->
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiQ2FsY3VsYXRvciIsInNob3J0X25hbWUiOiJDYWxjIiwiZGlzcGxheSI6ImZ1bGxzY3JlZW4iLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzAwMDAwMCIsInRoZW1lX2NvbG9yIjoiIzAwMDAwMCIsInN0YXJ0X3VybCI6Ii4ifQ==">
+<title>Calculator</title>
+<style>
+  /* ========== Reset & Base ========== */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%; width: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: -apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    /* 防止 iOS 橡皮筋效果 */
+    overscroll-behavior: none;
+    position: fixed;
+    top: 0; left: 0;
+  }
+
+  /* ========== 魔术模式全屏拦截层 ========== */
+  .magic-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 9999;
+    background: transparent;
+    cursor: default;
+  }
+  .magic-overlay.active {
+    display: block;
+  }
+
+  /* ========== Layout Container ========== */
+  .calculator {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;          /* dynamic viewport height */
+    height: 100vh;
+    max-width: 500px;
+    margin: 0 auto;
+    /* 适配 iOS 刘海屏和 Android 全屏安全区域 */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    padding-top: max(env(safe-area-inset-top), 0px);
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+
+  /* ========== Display Area ========== */
+  .display-area {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 0 24px 12px 24px;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* --- 秘密触发区域：显示屏左侧空白透明层 --- */
+  .secret-trigger {
+    position: absolute;
+    left: 0; top: 0;
+    width: 35%;
+    height: 100%;
+    z-index: 10;
+    /* 完全透明，不可见 */
+    background: transparent;
+    cursor: default;
+  }
+
+  .display-text {
+    font-size: 88px;
+    font-weight: 300;
+    color: #fff;
+    line-height: 1;
+    text-align: right;
+    word-break: break-all;
+    max-width: 100%;
+    transition: font-size 0.15s ease;
+  }
+
+  .display-text.shrink-1 { font-size: 68px; }
+  .display-text.shrink-2 { font-size: 52px; }
+  .display-text.shrink-3 { font-size: 40px; }
+
+  /* ========== Button Grid ========== */
+  .buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 0 12px 12px 12px;
+  }
+
+  .btn {
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    border: none;
+    outline: none;
+    font-size: 34px;
+    font-weight: 400;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: filter 0.1s;
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn:active { filter: brightness(1.4); }
+
+  /* 退格按钮图标样式 */
+  .btn-backspace {
+    font-size: 28px;
+    letter-spacing: -1px;
+  }
+
+  .btn-top-row {
+    color: #fff !important;
+  }
+
+  /* --- Color Themes --- */
+  .btn-number   { background: #333; color: #fff; }
+  .btn-operator { background: #ff9f0a; color: #fff; font-size: 40px; }
+  .btn-function { background: #a5a5a5; color: #000; font-size: 26px; }
+
+  /* Operator active (selected) state */
+  .btn-operator.active {
+    background: #fff;
+    color: #ff9f0a;
+  }
+
+  /* ========== Responsive font sizes ========== */
+  @media (max-height: 700px) {
+    .display-text { font-size: 64px; }
+    .display-text.shrink-1 { font-size: 52px; }
+    .display-text.shrink-2 { font-size: 40px; }
+    .display-text.shrink-3 { font-size: 32px; }
+    .btn { font-size: 28px; }
+    .btn-operator { font-size: 34px; }
+  }
+  @media (max-height: 600px) {
+    .display-text { font-size: 48px; }
+    .btn { font-size: 22px; }
+    .btn-operator { font-size: 28px; }
+    .buttons { gap: 8px; padding: 0 8px 8px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 🎩 魔术模式全屏拦截层：点击任意位置都视为按下数字键 -->
+<div class="magic-overlay" id="magicOverlay"></div>
+
+<div class="calculator">
+  <!-- 显示区域 -->
+  <div class="display-area">
+    <!-- 秘密触发区域（透明层，覆盖显示屏左侧） -->
+    <div class="secret-trigger" id="secretTrigger"></div>
+    <div class="display-text" id="display">0</div>
+  </div>
+
+  <!-- 按钮区域 -->
+  <div class="buttons">
+    <!-- Row 1: ⌫  C/AC  %  ÷ -->
+    <button class="btn btn-function btn-backspace btn-top-row" data-action="backspace">⌫</button>
+    <button class="btn btn-function btn-top-row" data-action="clear">AC</button>
+    <button class="btn btn-function btn-top-row" data-action="percent">%</button>
+    <button class="btn btn-operator btn-top-row" data-action="operator" data-op="÷">÷</button>
+
+    <!-- Row 2: 7 8 9 × -->
+    <button class="btn btn-number" data-action="digit" data-val="7">7</button>
+    <button class="btn btn-number" data-action="digit" data-val="8">8</button>
+    <button class="btn btn-number" data-action="digit" data-val="9">9</button>
+    <button class="btn btn-operator" data-action="operator" data-op="×">×</button>
+
+    <!-- Row 3: 4 5 6 − -->
+    <button class="btn btn-number" data-action="digit" data-val="4">4</button>
+    <button class="btn btn-number" data-action="digit" data-val="5">5</button>
+    <button class="btn btn-number" data-action="digit" data-val="6">6</button>
+    <button class="btn btn-operator" data-action="operator" data-op="−">−</button>
+
+    <!-- Row 4: 1 2 3 + -->
+    <button class="btn btn-number" data-action="digit" data-val="1">1</button>
+    <button class="btn btn-number" data-action="digit" data-val="2">2</button>
+    <button class="btn btn-number" data-action="digit" data-val="3">3</button>
+    <button class="btn btn-operator" data-action="operator" data-op="+">+</button>
+
+    <!-- Row 5: ±  0  .  = -->
+    <button class="btn btn-number" data-action="negate">+/−</button>
+    <button class="btn btn-number" data-action="digit" data-val="0">0</button>
+    <button class="btn btn-number" data-action="decimal">.</button>
+    <button class="btn btn-operator" data-action="equals">=</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============================================================
+  //  ██████  State Variables
+  // ============================================================
+  let displayValue  = '0';   // 当前显示的文本
+  let firstOperand  = null;  // 第一操作数
+  let operator      = null;  // 当前运算符
+  let waitingForSecondOperand = false; // 是否等待第二操作数输入
+  const displayEl   = document.getElementById('display');
+
+  // ============================================================
+  //  🎩 魔术逻辑 状态变量
+  // ============================================================
+  let magicMode       = false;  // 魔术模式是否激活
+  let magicNumber     = '';     // 计算出的修正值字符串（将逐位展示）
+  let magicIndex      = 0;     // 当前已展示到 magicNumber 的第几位
+  let magicReady      = false;  // 标记：是否已按下 + 进入准备状态
+  // magicReady = true 表示魔术师已按下 +，此时点击秘密区域才能触发
+
+  // ============================================================
+  //  🔧 隐藏配置状态（C 清零后输入 2026=====）
+  // ============================================================
+  const SECRET_CONFIG_CODE = '2026=====';
+  let configCodeBuffer = '';          // 隐藏指令输入缓冲
+  let configMode = false;             // 是否正在输入缓冲秒数
+  let configInputValue = '';          // 配置模式下输入值
+  let bufferSecondBase = 20;          // getTargetTimeResult 缓冲秒数基数（0~60）
+
+  // ============================================================
+  //  Display Helpers
+  // ============================================================
+  function updateDisplay(val) {
+    if (val === undefined) val = displayValue;
+    // 格式化数字：添加千分位逗号
+    let text = val;
+    if (!isNaN(parseFloat(val)) && isFinite(val)) {
+      const parts = val.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      text = parts.join('.');
+    }
+    displayEl.textContent = text;
+
+    // 根据字符长度动态缩小
+    const len = text.length;
+    displayEl.className = 'display-text';
+    if (len > 12)      displayEl.classList.add('shrink-3');
+    else if (len > 9)  displayEl.classList.add('shrink-2');
+    else if (len > 6)  displayEl.classList.add('shrink-1');
+  }
+
+  // ============================================================
+  //  Core Calculator Functions
+  // ============================================================
+  function inputDigit(digit) {
+    if (configMode) {
+      handleConfigDigit(digit);
+      return;
+    }
+
+    // -----------------------------------------------------------
+    //  🎩 魔术模式：拦截数字输入，逐位展示 MagicNumber
+    // -----------------------------------------------------------
+    if (magicMode) {
+      if (magicIndex >= magicNumber.length) return; // 已全部展示，忽略后续点击
+      magicIndex++;
+      displayValue = magicNumber.substring(0, magicIndex);
+      updateDisplay();
+      // 当全部展示完毕时，关闭全屏拦截层（后续按 = 需要正常响应）
+      if (magicIndex >= magicNumber.length) {
+        document.getElementById('magicOverlay').classList.remove('active');
+      }
+      return;
+    }
+    // -----------------------------------------------------------
+
+    if (waitingForSecondOperand) {
+      displayValue = digit;
+      waitingForSecondOperand = false;
+    } else {
+      displayValue = displayValue === '0' ? digit : displayValue + digit;
+    }
+    updateDisplay();
+
+    // 输入任意数字后，AC 立刻变成 C
+    document.querySelector('[data-action="clear"]').textContent = 'C';
+  }
+
+  function inputDecimal() {
+    if (magicMode) return; // 魔术模式下忽略小数点
+    if (waitingForSecondOperand) {
+      displayValue = '0.';
+      waitingForSecondOperand = false;
+      updateDisplay();
+      return;
+    }
+    if (!displayValue.includes('.')) {
+      displayValue += '.';
+    }
+    updateDisplay();
+  }
+
+  function handleOperator(nextOp) {
+    const inputValue = parseFloat(displayValue);
+
+    // -----------------------------------------------------------
+    //  🎩 准备阶段标记：当 + 被按下时，设置 magicReady
+    //     这意味着魔术师已经用 + 把当前 sum 锁定了
+    // -----------------------------------------------------------
+    if (nextOp === '+') {
+      magicReady = true;
+    } else {
+      magicReady = false;
+    }
+    // -----------------------------------------------------------
+
+    // 退出魔术模式于运算符切换时（安全回退）
+    // 正常不会走到这里，因为魔术模式下后续按 = 就完成
+
+    if (operator && !waitingForSecondOperand) {
+      const result = calculate(firstOperand, inputValue, operator);
+      displayValue = String(result);
+      firstOperand = result;
+    } else {
+      firstOperand = inputValue;
+    }
+
+    operator = nextOp;
+    waitingForSecondOperand = true;
+
+    // 高亮当前运算符
+    highlightOperator(nextOp);
+    updateDisplay();
+  }
+
+  function calculate(a, b, op) {
+    switch (op) {
+      case '+': return a + b;
+      case '−': return a - b;
+      case '×': return a * b;
+      case '÷': return b !== 0 ? a / b : 'Error';
+      default:  return b;
+    }
+  }
+
+  function handleEquals() {
+    if (configMode) {
+      submitConfigValue();
+      return;
+    }
+
+    // -----------------------------------------------------------
+    //  🎩 等号执行正常数学运算
+    //     在魔术流程中：firstOperand(CurrentSum) + MagicNumber = TargetResult
+    //     这里不做任何强制覆盖，完全由数学保证结果
+    // -----------------------------------------------------------
+    if (operator === null || waitingForSecondOperand) {
+      // 如果还在等第二操作数而用户直接按 =,用当前显示值
+      if (operator && waitingForSecondOperand) {
+        const b = parseFloat(displayValue);
+        const result = calculate(firstOperand, b, operator);
+        displayValue = formatResult(result);
+      }
+      clearHighlight();
+      updateDisplay();
+      // 重置魔术状态
+      resetMagicState();
+      return;
+    }
+
+    const secondOperand = parseFloat(displayValue);
+    const result = calculate(firstOperand, secondOperand, operator);
+
+    displayValue = formatResult(result);
+    firstOperand = null;
+    operator = null;
+    waitingForSecondOperand = false;
+
+    clearHighlight();
+    updateDisplay();
+
+    // 重置魔术状态
+    resetMagicState();
+  }
+
+  function formatResult(result) {
+    if (typeof result === 'string') return result; // 'Error'
+    // 避免浮点精度问题，最多保留10位小数
+    let str = parseFloat(result.toFixed(10)).toString();
+    return str;
+  }
+
+  function handleClear() {
+    const clearBtn = document.querySelector('[data-action="clear"]');
+
+    displayValue = '0';
+    firstOperand = null;
+    operator = null;
+    waitingForSecondOperand = false;
+    clearHighlight();
+    updateDisplay();
+    // 按 AC 也重置魔术
+    resetMagicState();
+    // 更新按钮文字
+    clearBtn.textContent = 'AC';
+
+    // 清零后重置隐藏口令缓冲
+    configCodeBuffer = '';
+
+    // 清零时退出配置模式
+    configMode = false;
+    configInputValue = '';
+  }
+
+  function handleNegate() {
+    if (magicMode) return;
+    if (displayValue === '0' || displayValue === 'Error') return;
+    displayValue = displayValue.charAt(0) === '-'
+      ? displayValue.substring(1)
+      : '-' + displayValue;
+    updateDisplay();
+  }
+
+  function handlePercent() {
+    if (magicMode) return;
+    const val = parseFloat(displayValue);
+    if (isNaN(val)) return;
+    displayValue = String(parseFloat((val / 100).toFixed(10)));
+    updateDisplay();
+  }
+
+  function handleBackspace() {
+    if (configMode) {
+      if (configInputValue.length === 0) return;
+      configInputValue = configInputValue.slice(0, -1);
+      updateDisplay(configInputValue || '0');
+      return;
+    }
+
+    if (magicMode) return;
+    if (displayValue === '0' || displayValue === 'Error') return;
+    if (waitingForSecondOperand) return;
+    if (displayValue.length === 1 || (displayValue.length === 2 && displayValue.charAt(0) === '-')) {
+      displayValue = '0';
+    } else {
+      displayValue = displayValue.slice(0, -1);
+    }
+    updateDisplay();
+  }
+
+  function trackConfigCode(token) {
+    if (configMode || magicMode) return;
+
+    // 只要在归零界面开始输入即可触发（包括刚进入页面）
+    const isZeroScreen = displayValue === '0';
+
+    // 尚未开始匹配时，必须从归零界面开始，且首字符匹配
+    if (configCodeBuffer.length === 0) {
+      if (!isZeroScreen || token !== SECRET_CONFIG_CODE.charAt(0)) return;
+      configCodeBuffer = token;
+      return;
+    }
+
+    const next = configCodeBuffer + token;
+    if (SECRET_CONFIG_CODE.startsWith(next)) {
+      configCodeBuffer = next;
+      if (configCodeBuffer === SECRET_CONFIG_CODE) {
+        enterConfigMode();
+      }
+      return;
+    }
+    configCodeBuffer = '';
+  }
+
+  function enterConfigMode() {
+    configMode = true;
+    configCodeBuffer = '';
+    configInputValue = '';
+
+    displayValue = '0';
+    firstOperand = null;
+    operator = null;
+    waitingForSecondOperand = false;
+    clearHighlight();
+    updateDisplay('0');
+
+    console.log('%c🔧 CONFIG MODE', 'color:#34c759;font-size:14px;font-weight:bold;');
+    console.log('  请输入 0~60 后按 = 保存，当前基数:', bufferSecondBase);
+  }
+
+  function handleConfigDigit(digit) {
+    if (configInputValue.length >= 2) return;
+    if (configInputValue === '' && digit === '0') {
+      configInputValue = '0';
+    } else if (configInputValue === '0') {
+      configInputValue = digit;
+    } else {
+      configInputValue += digit;
+    }
+    updateDisplay(configInputValue);
+  }
+
+  function submitConfigValue() {
+    let nextValue = parseInt(configInputValue || '0', 10);
+    if (isNaN(nextValue)) nextValue = bufferSecondBase;
+    if (nextValue < 0) nextValue = 0;
+    if (nextValue > 60) nextValue = 60;
+
+    bufferSecondBase = nextValue;
+    configMode = false;
+    configInputValue = '';
+
+    displayValue = '0';
+    firstOperand = null;
+    operator = null;
+    waitingForSecondOperand = false;
+    clearHighlight();
+    updateDisplay('0');
+    document.querySelector('[data-action="clear"]').textContent = 'AC';
+
+    console.log('%c✅ BUFFER CONFIG SAVED', 'color:#34c759;font-size:14px;font-weight:bold;');
+    console.log('  bufferSecondBase =', bufferSecondBase);
+  }
+
+  // ============================================================
+  //  Operator Highlight
+  // ============================================================
+  function highlightOperator(op) {
+    clearHighlight();
+    const opMap = { '+': '+', '−': '−', '×': '×', '÷': '÷' };
+    document.querySelectorAll('.btn-operator[data-op]').forEach(btn => {
+      if (btn.dataset.op === op) btn.classList.add('active');
+    });
+  }
+
+  function clearHighlight() {
+    document.querySelectorAll('.btn-operator').forEach(btn => btn.classList.remove('active'));
+  }
+
+  // ============================================================
+  //  🎩 魔术逻辑核心 — Secret Trigger & Magic Number Calculation
+  // ============================================================
+
+  /**
+   * 重置魔术状态
+   */
+  function resetMagicState() {
+    magicMode   = false;
+    magicNumber = '';
+    magicIndex  = 0;
+    magicReady  = false;
+    // 关闭全屏拦截层
+    document.getElementById('magicOverlay').classList.remove('active');
+  }
+
+  /**
+   * 获取"未来时间"格式化为 MMDDhhmm（8位数字）
+   * 智能判断（可配置）：
+   *   - 如果当前秒数 < bufferSecondBase：使用当前分钟
+   *   - 如果当前秒数 >= bufferSecondBase：+1 分钟
+   */
+  function getTargetTimeResult() {
+    const now = new Date();
+    const seconds = now.getSeconds();
+    const target = new Date(now.getTime());
+
+    if (seconds < bufferSecondBase) {
+      // 秒数在缓冲基数内，直接使用当前分钟
+      target.setMinutes(target.getMinutes() + 0);
+    } else {
+      // 秒数超过缓冲基数，+1 分钟
+      target.setMinutes(target.getMinutes() + 1);
+    }
+    target.setSeconds(0);
+    target.setMilliseconds(0);
+
+    const MM = String(target.getMonth() + 1).padStart(2, '0');
+    const DD = String(target.getDate()).padStart(2, '0');
+    const hh = String(target.getHours()).padStart(2, '0');
+    const mm = String(target.getMinutes()).padStart(2, '0');
+
+    return MM + DD + hh + mm; // e.g. "02172031"
+  }
+
+  /**
+   * 秘密触发事件处理
+   * 条件：必须已按下 +（magicReady = true）
+   * 逻辑：
+   *   1. 获取 CurrentSum = firstOperand（即 + 之前的结果）
+   *   2. 计算 TargetResult = MMDDhhmm (当前时间 + 约1分钟)
+   *   3. MagicNumber = TargetResult - CurrentSum
+   *   4. 如果 MagicNumber <= 0，直接让 MagicNumber = TargetResult
+   *   5. 激活魔术模式，进入"逐位展示"状态
+   */
+  function activateMagic() {
+    if (!magicReady) return;     // 必须先按 +
+    if (magicMode) return;       // 已经激活过了
+
+    const currentSum = firstOperand; // + 号之前的操作数
+    if (currentSum === null || isNaN(currentSum)) return;
+
+    const targetStr  = getTargetTimeResult();           // "02172032"
+    const targetNum  = parseInt(targetStr, 10);         // 2172032
+    let magicNum     = targetNum - currentSum;
+
+    // 如果修正值为负或零（极端情况），直接用目标值
+    if (magicNum <= 0) {
+      magicNum = targetNum;
+      // 同时重置 firstOperand 为 0，这样 0 + magicNum = targetNum
+      firstOperand = 0;
+    }
+
+    magicNumber = String(magicNum);
+    magicIndex  = 0;
+    magicMode   = true;
+
+    // 🎩 控制台输出标志，方便调试确认魔术已激活
+    console.log('%c🎩 MAGIC MODE ACTIVATED', 'color: #ff9f0a; font-size: 16px; font-weight: bold;');
+    console.log('  Target Time:', targetStr);
+    console.log('  CurrentSum:', currentSum);
+    console.log('  MagicNumber:', magicNumber);
+
+    // 保持当前显示不变（屏幕仍显示 CurrentSum），不要跳变到 0
+    // displayValue 保持之前的值，等用户第一次按键时再开始逐位展示
+    waitingForSecondOperand = false; // 允许 digit 输入进入拦截流程
+
+    // 激活全屏拦截层
+    document.getElementById('magicOverlay').classList.add('active');
+  }
+
+  // 绑定秘密触发区域
+  document.getElementById('secretTrigger').addEventListener('click', function (e) {
+    e.stopPropagation();
+    activateMagic();
+  });
+
+  // 🎩 全屏拦截层：魔术模式下点击任意位置都视为按下数字键
+  document.getElementById('magicOverlay').addEventListener('click', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (magicMode) {
+      inputDigit('0'); // 参数无所谓，魔术模式下会被拦截成 MagicNumber 的下一位
+    }
+  });
+  // 同时拦截 touchend 防止移动端延迟
+  document.getElementById('magicOverlay').addEventListener('touchend', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (magicMode) {
+      inputDigit('0');
+    }
+  });
+
+  // ============================================================
+  //  Event Delegation — Button Clicks
+  // ============================================================
+  document.querySelector('.buttons').addEventListener('click', function (e) {
+    const btn = e.target.closest('.btn');
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+
+    // 按任何非 AC 键时，将 AC 显示为 C（iOS 行为）
+    if (action !== 'clear' && displayValue !== '0') {
+      document.querySelector('[data-action="clear"]').textContent = 'C';
+    }
+
+    switch (action) {
+      case 'digit':
+        if (configMode) {
+          inputDigit(btn.dataset.val);
+          break;
+        }
+        trackConfigCode(btn.dataset.val);
+        if (configMode) break;
+        inputDigit(btn.dataset.val);
+        clearHighlight();
+        break;
+      case 'decimal':
+        inputDecimal();
+        clearHighlight();
+        break;
+      case 'operator':
+        handleOperator(btn.dataset.op);
+        break;
+      case 'equals':
+        if (configMode) {
+          handleEquals();
+          break;
+        }
+        trackConfigCode('=');
+        if (configMode) break;
+        handleEquals();
+        break;
+      case 'clear':
+        handleClear();
+        break;
+      case 'negate':
+        handleNegate();
+        break;
+      case 'percent':
+        handlePercent();
+        break;
+      case 'backspace':
+        handleBackspace();
+        break;
+    }
+  });
+
+  // ============================================================
+  //  全屏模式：尝试隐藏地址栏 (Android)
+  // ============================================================
+  window.addEventListener('load', function () {
+    setTimeout(function () { window.scrollTo(0, 1); }, 100);
+  });
+
+  // 阻止双击缩放和长按菜单
+  document.addEventListener('dblclick', function (e) { e.preventDefault(); });
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  // 初始化显示
+  updateDisplay();
+
+})();
+</script>
+
+</body>
+</html>
