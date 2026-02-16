@@ -10,6 +10,8 @@
 <!-- Android 全屏模式 -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="180x180" href="apple-touch-icon.png">
 <!-- PWA manifest for Android fullscreen -->
 <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiQ2FsY3VsYXRvciIsInNob3J0X25hbWUiOiJDYWxjIiwiZGlzcGxheSI6ImZ1bGxzY3JlZW4iLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzAwMDAwMCIsInRoZW1lX2NvbG9yIjoiIzAwMDAwMCIsInN0YXJ0X3VybCI6Ii4ifQ==">
 <title>Calculator</title>
@@ -29,6 +31,15 @@
     -webkit-user-select: none;
     /* 防止 iOS 橡皮筋效果 */
     overscroll-behavior: none;
+  }
+
+  html.standalone-mode,
+  html.standalone-mode body {
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
   }
 
   /* ========== 魔术模式全屏拦截层 ========== */
@@ -152,7 +163,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: filter 0.1s;
+    transition: filter 0.1s, transform 0.08s;
     appearance: none;
     -webkit-appearance: none;
     position: relative;
@@ -160,6 +171,10 @@
   }
 
   .btn:active { filter: brightness(1.4); }
+  .btn.pressed {
+    filter: brightness(1.4);
+    transform: scale(0.96);
+  }
 
   /* 退格按钮图标样式 */
   .btn-backspace {
@@ -771,6 +786,10 @@
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   }
 
+  function applyStandaloneModeClass() {
+    document.documentElement.classList.toggle('standalone-mode', isStandaloneMode());
+  }
+
   function tryHideBrowserBars() {
     if (isStandaloneMode()) return;
     requestAnimationFrame(function () {
@@ -818,6 +837,36 @@
   window.addEventListener('pageshow', tryHideBrowserBars);
   window.addEventListener('orientationchange', tryHideBrowserBars);
   window.addEventListener('load', maybeShowA2HSTip);
+  window.addEventListener('load', applyStandaloneModeClass);
+  window.addEventListener('pageshow', applyStandaloneModeClass);
+
+  if (isStandaloneMode()) {
+    document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+  }
+
+  document.querySelector('.buttons').addEventListener('touchstart', function (e) {
+    const btn = e.target.closest('.btn');
+    if (!btn) return;
+    btn.classList.add('pressed');
+  }, { passive: true });
+
+  document.querySelector('.buttons').addEventListener('touchend', function () {
+    document.querySelectorAll('.btn.pressed').forEach(function (el) { el.classList.remove('pressed'); });
+  });
+
+  document.querySelector('.buttons').addEventListener('touchcancel', function () {
+    document.querySelectorAll('.btn.pressed').forEach(function (el) { el.classList.remove('pressed'); });
+  });
+
+  document.querySelector('.buttons').addEventListener('mousedown', function (e) {
+    const btn = e.target.closest('.btn');
+    if (!btn) return;
+    btn.classList.add('pressed');
+  });
+
+  document.addEventListener('mouseup', function () {
+    document.querySelectorAll('.btn.pressed').forEach(function (el) { el.classList.remove('pressed'); });
+  });
 
   const a2hsCloseBtn = document.getElementById('a2hsTipClose');
   if (a2hsCloseBtn) {
