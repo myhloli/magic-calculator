@@ -29,9 +29,14 @@
     -webkit-user-select: none;
     /* 防止 iOS 橡皮筋效果 */
     overscroll-behavior: none;
+  }
+
+  /* 浏览器模式下滚动锁定后的状态 */
+  html.scroll-locked, body.scroll-locked {
     position: fixed;
     top: 0;
     left: 0;
+    overflow: hidden;
   }
 
   /* PWA 独立模式：完全禁止滚动 */
@@ -40,6 +45,8 @@
       min-height: 100vh;
       overflow: hidden;
       position: fixed;
+      top: 0;
+      left: 0;
     }
   }
 
@@ -69,6 +76,13 @@
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     padding-top: max(env(safe-area-inset-top), 0px);
     padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+
+  /* PWA 独立模式下增加额外底部空间，防止被安全区遮挡 */
+  @media (display-mode: standalone) {
+    .calculator {
+      padding-bottom: calc(max(env(safe-area-inset-bottom), 0px) + 5px);
+    }
   }
 
   /* ========== Display Area ========== */
@@ -787,6 +801,9 @@
 
   function lockScroll() {
     scrollLocked = true;
+    // 添加 class 来固定 body 位置
+    document.documentElement.classList.add('scroll-locked');
+    document.body.classList.add('scroll-locked');
     // 锁定后禁止回滚
     window.addEventListener('scroll', preventScrollBack, { passive: false });
     window.addEventListener('touchmove', preventScrollBack, { passive: false });
