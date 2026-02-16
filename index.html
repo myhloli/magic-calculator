@@ -29,6 +29,18 @@
     -webkit-user-select: none;
     /* 防止 iOS 橡皮筋效果 */
     overscroll-behavior: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+  }
+
+  /* PWA 独立模式：完全禁止滚动 */
+  @media (display-mode: standalone) {
+    html, body {
+      min-height: 100vh;
+      overflow: hidden;
+      position: fixed;
+    }
   }
 
   /* ========== 魔术模式全屏拦截层 ========== */
@@ -767,15 +779,61 @@
   //  浏览器模式下尝试收起地址栏/工具栏（iOS/Android）
   //  注意：浏览器模式无法强制永久隐藏，PWA 独立模式才可完全无地址栏
   // ============================================================
+  let scrollLocked = false;
+
   function isStandaloneMode() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
+  function lockScroll() {
+    scrollLocked = true;
+    // 锁定后禁止回滚
+    window.addEventListener('scroll', preventScrollBack, { passive: false });
+    window.addEventListener('touchmove', preventScrollBack, { passive: false });
+  }
+
+  function preventScrollBack(e) {
+    if (!scrollLocked) return;
+    // 保持在底部位置
+    if (window.scrollY < 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.scrollTo(0, 1);
+    }
   }
 
   function tryHideBrowserBars() {
     if (isStandaloneMode()) return;
     requestAnimationFrame(function () {
-      setTimeout(function () { window.scrollTo(0, 1); }, 60);
+      setTimeout(function () { 
+        window.scrollTo(0, 1);
+        // 滚动后锁定，防止上滑回来
+        setTimeout(lockScroll, 100);
+      }, 60);
     });
+  }
+
+  // PWA 模式下完全阻止触摸滚动
+  function preventTouchScroll(e) {
+    if (isStandaloneMode()) {
+      // 计算器区域内的触摸允许（按钮点击）
+      const calc = document.querySelector('.calculator');
+      if (calc && calc.contains(e.target)) {
+        return; // 允许按钮点击
+      }
+      // 阻止其他触摸滚动
+      e.preventDefault();
+    }
+  }
+
+  // 为 PWA 模式添加额外的滚动阻止
+  if (isStandaloneMode()) {
+    document.addEventListener('touchmove', function(e) {
+      // 只阻止可能导致滚动的触摸移动
+      if (e.touches.length === 1) {
+        e.preventDefault();
+      }
+    }, { passive: false });
   }
 
   const A2HS_TIP_KEY = 'a2hs-tip-dismissed-v1';
