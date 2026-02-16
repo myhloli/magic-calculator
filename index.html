@@ -36,6 +36,7 @@
   html.standalone-mode,
   html.standalone-mode body {
     height: 100%;
+    height: -webkit-fill-available;
     min-height: 100%;
     overflow: hidden;
     position: fixed;
@@ -65,9 +66,14 @@
     max-width: 500px;
     margin: 0 auto;
     /* 适配 iOS 刘海屏和 Android 全屏安全区域 */
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
     padding-top: max(env(safe-area-inset-top), 0px);
-    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+    padding-bottom: 0;
+  }
+
+  html.standalone-mode .calculator {
+    height: 100%;
+    height: -webkit-fill-available;
   }
 
   /* ========== Display Area ========== */
@@ -148,7 +154,7 @@
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 12px;
-    padding: 0 12px 12px 12px;
+    padding: 0 12px calc(12px + env(safe-area-inset-bottom)) 12px;
   }
 
   .btn {
